@@ -90,6 +90,7 @@ class FeignClientFactoryBean
 		Feign.Builder builder = get(context, Feign.Builder.class)
 				// required values
 				.logger(logger)
+			    // FeignClientsConfiguration 中注入的类
 				.encoder(get(context, Encoder.class))
 				.decoder(get(context, Decoder.class))
 				.contract(get(context, Contract.class));
@@ -164,6 +165,8 @@ class FeignClientFactoryBean
 		if (this.decode404) {
 			builder.decode404();
 		}
+
+		// 异常传播策略
 		ExceptionPropagationPolicy exceptionPropagationPolicy = getOptional(context,
 				ExceptionPropagationPolicy.class);
 		if (exceptionPropagationPolicy != null) {
@@ -253,10 +256,16 @@ class FeignClientFactoryBean
 
 	protected <T> T loadBalance(Feign.Builder builder, FeignContext context,
 			HardCodedTarget<T> target) {
+		// 1.获取Client的实现类，默认为LoadBalancerFeignClient类
+		// 实现在FeignRibbonClientAutoConfiguration中
 		Client client = getOptional(context, Client.class);
 		if (client != null) {
+			// 2.将LoadBalancerFeignClient包装到Feign.Builder
 			builder.client(client);
+			// 3.获取ApplicationContext中的Targeter实现
+			// 默认实现为HystrixTargeter，实现在FeignAutoConfiguration类中
 			Targeter targeter = get(context, Targeter.class);
+			// 获取feign client 对象
 			return targeter.target(this, builder, context, target);
 		}
 
@@ -275,9 +284,15 @@ class FeignClientFactoryBean
 	 * information
 	 */
 	<T> T getTarget() {
+		// 1.获取容器中的FeignContext实现
+		// 默认实现在FeignAutoConfiguration类中
 		FeignContext context = this.applicationContext.getBean(FeignContext.class);
+
+		// 2.主要使用构造者模式来构建一个Feign
+		// 在1）中详细分析
 		Feign.Builder builder = feign(context);
 
+		// 3.本例中没有指定URL，故执行if
 		if (!StringUtils.hasText(this.url)) {
 			if (!this.name.startsWith("http")) {
 				this.url = "http://" + this.name;
@@ -286,6 +301,7 @@ class FeignClientFactoryBean
 				this.url = this.name;
 			}
 			this.url += cleanPath();
+			// 负载均衡
 			return (T) loadBalance(builder, context,
 					new HardCodedTarget<>(this.type, this.name, this.url));
 		}

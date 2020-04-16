@@ -57,6 +57,8 @@ import org.springframework.util.StringUtils;
  * @author Jakub Narloch
  * @author Venil Noronha
  * @author Gang Li
+ *
+ * feign client 注册相关
  */
 class FeignClientsRegistrar
 		implements ImportBeanDefinitionRegistrar, ResourceLoaderAware, EnvironmentAware {
@@ -140,7 +142,11 @@ class FeignClientsRegistrar
 	@Override
 	public void registerBeanDefinitions(AnnotationMetadata metadata,
 			BeanDefinitionRegistry registry) {
+		// 1.针对那些在@EnableFeignClients中添加了defaultConfiguration属性的进行操作
+		// 2.将这些类定义的bean添加到容器中
 		registerDefaultConfiguration(metadata, registry);
+
+		// 2.注册那些添加了@FeignClient的类或接口
 		registerFeignClients(metadata, registry);
 	}
 
@@ -164,11 +170,13 @@ class FeignClientsRegistrar
 
 	public void registerFeignClients(AnnotationMetadata metadata,
 			BeanDefinitionRegistry registry) {
+		// 1.以下代码的主要功能是扫描包下的所有带有@FeignClient注解的类
 		ClassPathScanningCandidateComponentProvider scanner = getScanner();
 		scanner.setResourceLoader(this.resourceLoader);
 
 		Set<String> basePackages;
 
+		// @FeignClient注解过滤器
 		Map<String, Object> attrs = metadata
 				.getAnnotationAttributes(EnableFeignClients.class.getName());
 		AnnotationTypeFilter annotationTypeFilter = new AnnotationTypeFilter(
@@ -176,6 +184,7 @@ class FeignClientsRegistrar
 		final Class<?>[] clients = attrs == null ? null
 				: (Class<?>[]) attrs.get("clients");
 		if (clients == null || clients.length == 0) {
+			// 在这里获取带有@FeignClient注解的类，放在basePackages中
 			scanner.addIncludeFilter(annotationTypeFilter);
 			basePackages = getBasePackages(metadata);
 		}
@@ -197,6 +206,10 @@ class FeignClientsRegistrar
 					new AllTypeFilter(Arrays.asList(filter, annotationTypeFilter)));
 		}
 
+
+		// 2.针对所有带有@FeignClient注解的类或接口分别封装
+		// 注册其Configuration类（如果有的话）
+		// 并将类或接口本身注入到Spring中
 		for (String basePackage : basePackages) {
 			Set<BeanDefinition> candidateComponents = scanner
 					.findCandidateComponents(basePackage);
@@ -205,6 +218,7 @@ class FeignClientsRegistrar
 					// verify annotated class is an interface
 					AnnotatedBeanDefinition beanDefinition = (AnnotatedBeanDefinition) candidateComponent;
 					AnnotationMetadata annotationMetadata = beanDefinition.getMetadata();
+					// @FeignClient 只能用于接口
 					Assert.isTrue(annotationMetadata.isInterface(),
 							"@FeignClient can only be specified on an interface");
 
@@ -212,10 +226,14 @@ class FeignClientsRegistrar
 							.getAnnotationAttributes(
 									FeignClient.class.getCanonicalName());
 
+					// 获取client 名称
 					String name = getClientName(attributes);
+					// 2.1 注册其Configuration类（如果有的话）
+					// 本例中使用的是默认的Configuration，就不再分析该段代码
 					registerClientConfiguration(registry, name,
 							attributes.get("configuration"));
 
+					// 2.2 并将类或接口本身注入到Spring中
 					registerFeignClient(registry, annotationMetadata, attributes);
 				}
 			}
@@ -224,10 +242,21 @@ class FeignClientsRegistrar
 
 	private void registerFeignClient(BeanDefinitionRegistry registry,
 			AnnotationMetadata annotationMetadata, Map<String, Object> attributes) {
+		// FeignClientFactoryBean feign client 工厂类
+		// 1.获取类名称，也就是本例中的FeignService接口
 		String className = annotationMetadata.getClassName();
+
+		// 2.BeanDefinitionBuilder的主要作用就是构建一个AbstractBeanDefinition
+		// AbstractBeanDefinition类最终被构建成一个BeanDefinitionHolder
+		// 然后注册到Spring中
+		// 注意：beanDefinition类为FeignClientFactoryBean，故在Spring获取类的时候实际返回的是
+		// FeignClientFactoryBean类
 		BeanDefinitionBuilder definition = BeanDefinitionBuilder
 				.genericBeanDefinition(FeignClientFactoryBean.class);
 		validate(attributes);
+
+		// 3.添加FeignClientFactoryBean的属性，
+		// 这些属性也都是我们在@FeignClient中定义的属性
 		definition.addPropertyValue("url", getUrl(attributes));
 		definition.addPropertyValue("path", getPath(attributes));
 		String name = getName(attributes);
@@ -240,9 +269,12 @@ class FeignClientsRegistrar
 		definition.addPropertyValue("fallbackFactory", attributes.get("fallbackFactory"));
 		definition.setAutowireMode(AbstractBeanDefinition.AUTOWIRE_BY_TYPE);
 
+		// 4.设置别名 name就是我们在@FeignClient中定义的name属性
 		String alias = contextId + "FeignClient";
-		AbstractBeanDefinition beanDefinition = definition.getBeanDefinition();
 
+		// 5.定义BeanDefinitionHolder，
+		// 在本例中 名称为FeignService，类为FeignClientFactoryBean
+		AbstractBeanDefinition beanDefinition = definition.getBeanDefinition();
 		boolean primary = (Boolean) attributes.get("primary"); // has a default, won't be
 																// null
 

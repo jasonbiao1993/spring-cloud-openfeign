@@ -101,6 +101,11 @@ public class FeignClientsConfiguration {
 		return encoder;
 	}
 
+	/**
+	 * SpringMvcContract 注解解析器
+	 * @param feignConversionService
+	 * @return
+	 */
 	@Bean
 	@ConditionalOnMissingBean
 	public Contract feignContract(ConversionService feignConversionService) {

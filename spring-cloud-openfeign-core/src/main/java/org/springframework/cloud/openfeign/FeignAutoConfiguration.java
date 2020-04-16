@@ -72,6 +72,7 @@ public class FeignAutoConfiguration {
 
 	@Bean
 	public FeignContext feignContext() {
+		// FeignContext 实例注册
 		FeignContext context = new FeignContext();
 		context.setConfigurations(this.configurations);
 		return context;
